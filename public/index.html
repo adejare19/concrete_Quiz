@@ -163,7 +163,7 @@
     <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="6" fill="#f5e642"/><rect x="7" y="6" width="18" height="2.5" rx="1" fill="#1a1a1a"/><rect x="7" y="23.5" width="18" height="2.5" rx="1" fill="#1a1a1a"/><text x="16" y="20.5" font-family="Georgia,serif" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">C</text></svg>
     Concrete Quiz
   </a>
-  <!-- <span class="nav-badge"><span class="pulse-dot"></span>&nbsp; GPT-4o mini</span> -->
+  <span class="nav-badge"><span class="pulse-dot"></span>&nbsp; GPT-4o mini</span>
 </nav>
 
 <main class="hero">
@@ -231,6 +231,63 @@
 <div id="toast" class="toast"></div>
 
 <script>
+  // ── Pre-fetch questions as soon as the page loads ──────────────────
+  // This way questions are ready (or nearly ready) when user clicks Start
+  let prefetchPromise = null;
+
+  function prefetch() {
+    // Check cache first — if we already have fresh questions, skip
+    try {
+      const cached = sessionStorage.getItem('quiz_questions');
+      const cachedAt = parseInt(sessionStorage.getItem('quiz_cached_at') || '0');
+      if (cached && Date.now() - cachedAt < 25 * 60 * 1000) {
+        console.log('Using sessionStorage cache');
+        return Promise.resolve(JSON.parse(cached));
+      }
+    } catch(e) {}
+
+    prefetchPromise = fetch('/api/ai/questions')
+      .then(r => r.json())
+      .then(data => {
+        if (data.success && data.questions) {
+          sessionStorage.setItem('quiz_questions', JSON.stringify(data.questions));
+          sessionStorage.setItem('quiz_cached_at', Date.now().toString());
+          console.log('Questions pre-fetched ✅');
+          return data.questions;
+        }
+        throw new Error(data.error || 'Failed');
+      })
+      .catch(err => {
+        console.warn('Pre-fetch failed (will retry on Start):', err.message);
+        prefetchPromise = null;
+        return null;
+      });
+    return prefetchPromise;
+  }
+
+  // Start pre-fetching immediately on page load
+  window.addEventListener('DOMContentLoaded', () => {
+    prefetch();
+    updateStartBtn();
+  });
+
+  function updateStartBtn() {
+    // Poll until we know if questions are ready
+    const check = setInterval(() => {
+      try {
+        const cached = sessionStorage.getItem('quiz_questions');
+        const cachedAt = parseInt(sessionStorage.getItem('quiz_cached_at') || '0');
+        if (cached && Date.now() - cachedAt < 25 * 60 * 1000) {
+          const btn = document.getElementById('startBtn');
+          btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><polygon points="2,1 13,7 2,13" fill="currentColor"/></svg> Start Quiz';
+          clearInterval(check);
+        }
+      } catch(e) { clearInterval(check); }
+    }, 500);
+    // Stop polling after 40s regardless
+    setTimeout(() => clearInterval(check), 40000);
+  }
+
   function showToast(msg, type = '') {
     const t = document.getElementById('toast');
     t.textContent = msg;
@@ -243,30 +300,44 @@
     const overlay = document.getElementById('loadingOverlay');
     const loadingMsg = document.getElementById('loadingMsg');
 
+    // Check if we already have questions cached
+    try {
+      const cached = sessionStorage.getItem('quiz_questions');
+      const cachedAt = parseInt(sessionStorage.getItem('quiz_cached_at') || '0');
+      if (cached && Date.now() - cachedAt < 25 * 60 * 1000) {
+        window.location.href = 'quiz.html';
+        return;
+      }
+    } catch(e) {}
+
     btn.disabled = true;
     overlay.classList.remove('hidden');
 
     const messages = [
-      'Fetching Concrete documentation…',
-      'AI is generating 15 questions…',
-      'Validating quiz structure…',
-      'Almost ready…'
+      'AI is reading the documentation…',
+      'Crafting 15 questions…',
+      'Almost ready…',
+      'Just a few more seconds…',
     ];
     let msgIdx = 0;
+    loadingMsg.textContent = messages[0];
     const msgInterval = setInterval(() => {
-      msgIdx = (msgIdx + 1) % messages.length;
+      msgIdx = Math.min(msgIdx + 1, messages.length - 1);
       loadingMsg.textContent = messages[msgIdx];
-    }, 2200);
+    }, 6000);
 
     try {
-      const res = await fetch('/api/ai/questions');
-      const data = await res.json();
+      // Use in-flight prefetch if it's still running, otherwise fire new request
+      const questions = await (prefetchPromise || fetch('/api/ai/questions').then(r => r.json()).then(d => {
+        if (!d.success) throw new Error(d.error);
+        return d.questions;
+      }));
       clearInterval(msgInterval);
 
-      if (!data.success || !data.questions) throw new Error(data.error || 'Failed to load questions');
+      if (!questions) throw new Error('Failed to load questions');
 
-      sessionStorage.setItem('quiz_questions', JSON.stringify(data.questions));
-      sessionStorage.setItem('quiz_start', Date.now().toString());
+      sessionStorage.setItem('quiz_questions', JSON.stringify(questions));
+      sessionStorage.setItem('quiz_cached_at', Date.now().toString());
       window.location.href = 'quiz.html';
     } catch (err) {
       clearInterval(msgInterval);
