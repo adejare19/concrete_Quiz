@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Concrete Quiz — Question</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .quiz-layout {
+      min-height: calc(100vh - 73px);
+      display: flex;
+      flex-direction: column;
+      padding: 32px 20px 60px;
+      max-width: 760px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* ---- HEADER BAR ---- */
+    .quiz-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      gap: 20px;
+    }
+
+    .progress-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .progress-info {
+      display: flex;
+      justify-content: space-between;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--text3);
+    }
+
+    .progress-bar {
+      height: 4px;
+      background: var(--bg3);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--orange);
+      border-radius: 2px;
+      transition: width 0.4s ease;
+    }
+
+    /* ---- TIMER ---- */
+    .timer-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      min-width: 72px;
+    }
+
+    .timer-circle {
+      position: relative;
+      width: 60px;
+      height: 60px;
+    }
+
+    .timer-svg {
+      transform: rotate(-90deg);
+      width: 60px;
+      height: 60px;
+    }
+
+    .timer-track { fill: none; stroke: var(--bg3); stroke-width: 4; }
+    .timer-fill {
+      fill: none;
+      stroke: var(--orange);
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-dasharray: 163;
+      stroke-dashoffset: 0;
+      transition: stroke-dashoffset 1s linear, stroke 0.3s;
+    }
+    .timer-fill.warning { stroke: #facc15; }
+    .timer-fill.danger { stroke: var(--red); }
+
+    .timer-num {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .timer-num.danger { color: var(--red); }
+
+    .timer-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.6rem;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    /* ---- QUESTION CARD ---- */
+    .q-number {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.68rem;
+      color: var(--orange);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 12px;
+    }
+
+    .q-text {
+      font-size: 1.2rem;
+      font-weight: 700;
+      line-height: 1.45;
+      margin-bottom: 28px;
+      letter-spacing: -0.01em;
+    }
+
+    /* ---- OPTIONS ---- */
+    .options-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+
+    .option-btn {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      cursor: pointer;
+      text-align: left;
+      font-family: 'Syne', sans-serif;
+      font-size: 0.9rem;
+      color: var(--text);
+      transition: all 0.15s ease;
+      width: 100%;
+    }
+
+    .option-btn:hover:not(:disabled):not(.answered) {
+      border-color: var(--border2);
+      background: var(--bg2);
+      transform: translateX(3px);
+    }
+
+    .option-btn:disabled { cursor: default; }
+
+    .option-letter {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text3);
+      min-width: 20px;
+      padding-top: 1px;
+      transition: color 0.15s;
+    }
+
+    .option-text { flex: 1; line-height: 1.5; }
+
+    .option-btn.correct {
+      border-color: var(--green);
+      background: var(--green-dim);
+    }
+    .option-btn.correct .option-letter { color: var(--green); }
+
+    .option-btn.wrong {
+      border-color: var(--red);
+      background: var(--red-dim);
+    }
+    .option-btn.wrong .option-letter { color: var(--red); }
+
+    .option-btn.dimmed {
+      opacity: 0.4;
+    }
+
+    /* ---- FEEDBACK AREA ---- */
+    .feedback-area {
+      margin-top: 16px;
+      display: none;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .feedback-area.visible { display: flex; }
+
+    .feedback-box {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 0.86rem;
+      color: var(--text2);
+      line-height: 1.7;
+      position: relative;
+    }
+
+    .feedback-box .feedback-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 8px;
+    }
+
+    .feedback-box.correct-box { border-color: var(--green); }
+    .feedback-box.correct-box .feedback-label { color: var(--green); }
+    .feedback-box.wrong-box { border-color: var(--red); }
+    .feedback-box.wrong-box .feedback-label { color: var(--red); }
+
+    .explain-content { display: none; }
+    .explain-content.visible { display: block; }
+
+    .explain-loading {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--text3);
+      display: none;
+    }
+    .explain-loading.visible { display: block; }
+
+    /* ---- ACTION ROW ---- */
+    .action-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .action-left { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    .score-pill {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.7rem;
+      background: var(--orange-dim);
+      border: 1px solid var(--orange-glow);
+      color: var(--orange);
+      padding: 6px 14px;
+      border-radius: 100px;
+    }
+
+    /* ---- ASK AI MODAL ---- */
+    #askModal .modal { position: relative; }
+
+    .ask-form { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+
+    .ai-response {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      font-size: 0.84rem;
+      color: var(--text2);
+      line-height: 1.7;
+      display: none;
+      margin-top: 4px;
+    }
+    .ai-response.visible { display: block; }
+
+    .ai-response-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.6rem;
+      color: var(--orange);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 6px;
+    }
+
+    /* timeout state */
+    .timeout-notice {
+      text-align: center;
+      padding: 12px;
+      background: var(--red-dim);
+      border: 1px solid var(--red);
+      border-radius: var(--radius);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--red);
+      margin-bottom: 16px;
+      display: none;
+    }
+    .timeout-notice.visible { display: block; }
+
+    @media (max-width: 600px) {
+      .quiz-header { flex-wrap: wrap; }
+      .q-text { font-size: 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="/" class="nav-logo">
+    <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="6" fill="#f5e642"/><rect x="7" y="6" width="18" height="2.5" rx="1" fill="#1a1a1a"/><rect x="7" y="23.5" width="18" height="2.5" rx="1" fill="#1a1a1a"/><text x="16" y="20.5" font-family="Georgia,serif" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">C</text></svg>
+    Concrete Quiz
+  </a>
+  <span class="score-pill" id="navScore">Score: 0 / 0</span>
+</nav>
+
+<main class="quiz-layout">
+
+  <!-- Header: progress + timer -->
+  <div class="quiz-header">
+    <div class="progress-wrap">
+      <div class="progress-info">
+        <span id="progressLabel">Question 1 of 15</span>
+        <span id="progressPct">0%</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width:0%"></div>
+      </div>
+    </div>
+    <div class="timer-wrap">
+      <div class="timer-circle">
+        <svg class="timer-svg" viewBox="0 0 60 60">
+          <circle class="timer-track" cx="30" cy="30" r="26" />
+          <circle class="timer-fill" id="timerArc" cx="30" cy="30" r="26" />
+        </svg>
+        <div class="timer-num" id="timerNum">75</div>
+      </div>
+      <span class="timer-label">seconds</span>
+    </div>
+  </div>
+
+  <!-- Question Card -->
+  <div class="card" id="questionCard">
+    <div class="q-number" id="qNumber">Q01 / 15</div>
+    <div class="q-text" id="qText">Loading question…</div>
+
+    <div class="timeout-notice" id="timeoutNotice">⏱ Time's up! Moving to next question…</div>
+
+    <div class="options-grid" id="optionsGrid"></div>
+
+    <!-- Feedback after answer -->
+    <div class="feedback-area" id="feedbackArea">
+      <div class="feedback-box" id="resultBox">
+        <div class="feedback-label" id="resultLabel">Result</div>
+        <div id="resultText"></div>
+      </div>
+      <div class="feedback-box" id="explainBox" style="display:none">
+        <div class="feedback-label" style="color:var(--orange)">AI Explanation</div>
+        <div class="explain-loading" id="explainLoading">Generating explanation…</div>
+        <div class="explain-content" id="explainContent"></div>
+      </div>
+    </div>
+
+    <!-- Action row -->
+    <div class="action-row" id="actionRow" style="margin-top:20px">
+      <div class="action-left">
+        <button class="btn btn-ghost" id="explainBtn" onclick="triggerExplain()" style="display:none">
+          💡 Explain Answer
+        </button>
+        <button class="btn btn-ghost" id="askBtn" onclick="openAsk()">
+          🤖 Ask AI
+        </button>
+      </div>
+      <button class="btn btn-primary" id="nextBtn" onclick="nextQuestion()" style="display:none">
+        Next →
+      </button>
+    </div>
+  </div>
+
+</main>
+
+<!-- Ask AI Modal -->
+<div class="modal-overlay hidden" id="askModal">
+  <div class="modal">
+    <div class="modal-title">🤖 Ask About Concrete.xyz</div>
+    <p style="font-size:0.82rem;color:var(--text3);margin-bottom:16px;font-family:'Space Mono',monospace;">
+      Only answers from official documentation.
+    </p>
+    <div class="ask-form">
+      <textarea class="input" id="askInput" rows="3" placeholder="e.g. What are the Earn V2 roles? How does async withdrawal work?"></textarea>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-primary" id="askSubmitBtn" onclick="submitAsk()">Ask</button>
+        <button class="btn btn-ghost" onclick="closeAsk()">Cancel</button>
+      </div>
+      <div class="ai-response" id="aiResponse">
+        <div class="ai-response-label">AI Answer</div>
+        <div id="aiResponseText"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  // ---- STATE ----
+  let questions = [];
+  let currentIdx = 0;
+  let score = 0;
+  let answered = false;
+  let timerInterval = null;
+  let timeLeft = 75;
+  const TOTAL_TIME = 75;
+  const CIRCUMFERENCE = 163; // 2π × 26
+
+  // ---- INIT ----
+  window.addEventListener('DOMContentLoaded', () => {
+    const raw = sessionStorage.getItem('quiz_questions');
+    if (!raw) return (window.location.href = '/');
+    questions = JSON.parse(raw);
+    if (!questions || questions.length !== 15) return (window.location.href = '/');
+    renderQuestion();
+    startTimer();
+  });
+
+  // ---- TIMER ----
+  function startTimer() {
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+      timeLeft--;
+      updateTimerUI();
+      if (timeLeft <= 0) {
+        clearInterval(timerInterval);
+        handleTimeout();
+      }
+    }, 1000);
+  }
+
+  function updateTimerUI() {
+    const arc = document.getElementById('timerArc');
+    const num = document.getElementById('timerNum');
+    const offset = CIRCUMFERENCE * (1 - timeLeft / TOTAL_TIME);
+    arc.style.strokeDashoffset = offset;
+
+    num.textContent = timeLeft;
+
+    arc.className = 'timer-fill';
+    num.className = 'timer-num';
+    if (timeLeft <= 15) { arc.classList.add('danger'); num.classList.add('danger'); }
+    else if (timeLeft <= 30) { arc.classList.add('warning'); }
+  }
+
+  function handleTimeout() {
+    if (answered) return;
+    answered = true;
+    document.getElementById('timeoutNotice').classList.add('visible');
+    // Disable options
+    document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
+    // Show correct answer
+    const q = questions[currentIdx];
+    const correctLetter = q.correctAnswer;
+    document.querySelectorAll('.option-btn').forEach(btn => {
+      const letter = btn.dataset.letter;
+      if (letter === correctLetter) btn.classList.add('correct');
+      else btn.classList.add('dimmed');
+    });
+    showFeedback(false, true);
+    document.getElementById('nextBtn').style.display = 'flex';
+    document.getElementById('explainBtn').style.display = 'flex';
+  }
+
+  // ---- RENDER QUESTION ----
+  function renderQuestion() {
+    answered = false;
+    const q = questions[currentIdx];
+    const n = currentIdx + 1;
+
+    document.getElementById('qNumber').textContent = `Q${String(n).padStart(2,'0')} / 15`;
+    document.getElementById('qText').textContent = q.question;
+    document.getElementById('progressLabel').textContent = `Question ${n} of 15`;
+    const pct = Math.round((currentIdx / 15) * 100);
+    document.getElementById('progressPct').textContent = pct + '%';
+    document.getElementById('progressFill').style.width = pct + '%';
+
+    document.getElementById('timeoutNotice').classList.remove('visible');
+    document.getElementById('feedbackArea').classList.remove('visible');
+    document.getElementById('resultBox').className = 'feedback-box';
+    document.getElementById('explainBox').style.display = 'none';
+    document.getElementById('explainContent').classList.remove('visible');
+    document.getElementById('explainContent').textContent = '';
+    document.getElementById('explainLoading').classList.remove('visible');
+    document.getElementById('nextBtn').style.display = 'none';
+    document.getElementById('explainBtn').style.display = 'none';
+
+    // Render options
+    const grid = document.getElementById('optionsGrid');
+    grid.innerHTML = '';
+    const letters = ['A', 'B', 'C', 'D'];
+    q.options.forEach((opt, i) => {
+      const letter = letters[i];
+      const btn = document.createElement('button');
+      btn.className = 'option-btn';
+      btn.dataset.letter = letter;
+      btn.innerHTML = `<span class="option-letter">${letter}</span><span class="option-text">${opt}</span>`;
+      btn.addEventListener('click', () => selectAnswer(letter));
+      grid.appendChild(btn);
+    });
+
+    updateNavScore();
+  }
+
+  // ---- ANSWER SELECTION ----
+  function selectAnswer(letter) {
+    if (answered) return;
+    answered = true;
+    clearInterval(timerInterval);
+
+    const q = questions[currentIdx];
+    const correct = q.correctAnswer;
+    const isCorrect = letter === correct;
+    if (isCorrect) score++;
+
+    // Style options
+    document.querySelectorAll('.option-btn').forEach(btn => {
+      btn.disabled = true;
+      const l = btn.dataset.letter;
+      if (l === correct) btn.classList.add('correct');
+      else if (l === letter && !isCorrect) btn.classList.add('wrong');
+      else btn.classList.add('dimmed');
+    });
+
+    showFeedback(isCorrect, false);
+    document.getElementById('nextBtn').style.display = 'flex';
+    document.getElementById('explainBtn').style.display = 'flex';
+    updateNavScore();
+  }
+
+  function showFeedback(isCorrect, timedOut) {
+    const area = document.getElementById('feedbackArea');
+    const box = document.getElementById('resultBox');
+    const label = document.getElementById('resultLabel');
+    const text = document.getElementById('resultText');
+
+    area.classList.add('visible');
+
+    if (timedOut) {
+      box.classList.add('wrong-box');
+      label.textContent = 'Time Up';
+      text.textContent = `The correct answer was: ${questions[currentIdx].correctAnswer}. ${questions[currentIdx].options.find(o => o.startsWith(questions[currentIdx].correctAnswer))}`;
+    } else if (isCorrect) {
+      box.classList.add('correct-box');
+      label.textContent = '✓ Correct';
+      text.textContent = 'Well done! That\'s the right answer.';
+    } else {
+      box.classList.add('wrong-box');
+      label.textContent = '✗ Incorrect';
+      const correctOpt = questions[currentIdx].options.find(o => o.startsWith(questions[currentIdx].correctAnswer));
+      text.textContent = `The correct answer was: ${correctOpt}`;
+    }
+  }
+
+  // ---- EXPLAIN ----
+  async function triggerExplain() {
+    const btn = document.getElementById('explainBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Loading…';
+
+    const box = document.getElementById('explainBox');
+    const loading = document.getElementById('explainLoading');
+    const content = document.getElementById('explainContent');
+
+    box.style.display = 'block';
+    loading.classList.add('visible');
+    content.classList.remove('visible');
+
+    const q = questions[currentIdx];
+    const userAnswerEl = document.querySelector('.option-btn.correct, .option-btn.wrong');
+    const userAnswer = userAnswerEl ? (userAnswerEl.classList.contains('wrong') ? userAnswerEl.dataset.letter : q.correctAnswer) : q.correctAnswer;
+
+    try {
+      const res = await fetch('/api/ai/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: q.question,
+          options: q.options,
+          correctAnswer: q.correctAnswer,
+          userAnswer
+        })
+      });
+      const data = await res.json();
+      loading.classList.remove('visible');
+      content.textContent = data.success ? data.explanation : (data.error || 'Failed to get explanation.');
+      content.classList.add('visible');
+    } catch (err) {
+      loading.classList.remove('visible');
+      content.textContent = 'Network error. Please try again.';
+      content.classList.add('visible');
+    }
+
+    btn.disabled = true;
+    btn.textContent = '💡 Explained';
+  }
+
+  // ---- NEXT ----
+  function nextQuestion() {
+    currentIdx++;
+    if (currentIdx >= questions.length) {
+      // Save result — use String() to ensure '0' is stored correctly
+      sessionStorage.setItem('quiz_score', String(score));
+      sessionStorage.setItem('quiz_total', String(questions.length));
+      window.location.href = 'result.html';
+      return;
+    }
+    timeLeft = TOTAL_TIME;
+    updateTimerUI();
+    renderQuestion();
+    startTimer();
+  }
+
+  // ---- ASK AI ----
+  function openAsk() {
+    document.getElementById('askModal').classList.remove('hidden');
+    document.getElementById('askInput').focus();
+    document.getElementById('aiResponse').classList.remove('visible');
+    document.getElementById('askInput').value = '';
+  }
+
+  function closeAsk() {
+    document.getElementById('askModal').classList.add('hidden');
+  }
+
+  async function submitAsk() {
+    const q = document.getElementById('askInput').value.trim();
+    if (!q) return;
+
+    const btn = document.getElementById('askSubmitBtn');
+    const responseEl = document.getElementById('aiResponse');
+    const responseText = document.getElementById('aiResponseText');
+
+    btn.disabled = true;
+    btn.textContent = 'Thinking…';
+    responseEl.classList.remove('visible');
+
+    try {
+      const res = await fetch('/api/ai/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q })
+      });
+      const data = await res.json();
+      responseText.textContent = data.success ? data.answer : (data.error || 'Failed to get answer.');
+      responseEl.classList.add('visible');
+    } catch (err) {
+      responseText.textContent = 'Network error. Please try again.';
+      responseEl.classList.add('visible');
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Ask';
+  }
+
+  // ---- UTILS ----
+  function updateNavScore() {
+    document.getElementById('navScore').textContent = `Score: ${score} / ${currentIdx + (answered ? 1 : 0)}`;
+  }
+
+  function showToast(msg, type = '') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast show' + (type ? ' ' + type : '');
+    setTimeout(() => t.className = 'toast', 3500);
+  }
+
+  // Close modal on overlay click
+  document.getElementById('askModal').addEventListener('click', e => {
+    if (e.target === document.getElementById('askModal')) closeAsk();
+  });
+
+  // Allow Enter in ask input
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('askInput')?.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitAsk(); }
+    });
+  });
+</script>
+</body>
+</html>
