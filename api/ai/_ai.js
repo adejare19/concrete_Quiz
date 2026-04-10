@@ -5,9 +5,23 @@ const { CONCRETE_KNOWLEDGE } = require('./_knowledge');
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const MODEL = 'gpt-4o-mini';
 
-async function callOpenAI(system, user, maxTokens) {
+// ── Generic caller ─────────────────────────────────────────
+async function callOpenAI(system, user, maxTokens, jsonMode) {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error('OPENAI_API_KEY is not set in environment variables');
+  if (!apiKey) throw new Error('OPENAI_API_KEY is not set');
+
+  const body = {
+    model: MODEL,
+    max_tokens: maxTokens || 4000,
+    temperature: 0.3,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user',   content: user   },
+    ],
+  };
+
+  // JSON mode guarantees valid JSON output — eliminates parse failures
+  if (jsonMode) body.response_format = { type: 'json_object' };
 
   const res = await fetch(OPENAI_URL, {
     method: 'POST',
@@ -15,26 +29,19 @@ async function callOpenAI(system, user, maxTokens) {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: maxTokens || 8000,
-      temperature: 0.3,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user',   content: user   },
-      ],
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`OpenAI ${res.status}: ${body}`);
+    const txt = await res.text();
+    throw new Error(`OpenAI ${res.status}: ${txt}`);
   }
 
   const data = await res.json();
   return data.choices[0].message.content;
 }
 
+// ── System prompt ──────────────────────────────────────────
 function systemPrompt() {
   return `You are an AI assistant for Concrete.xyz. Answer ONLY using the documentation below.
 If not found, respond: "Not found in project documentation". Do not hallucinate.
@@ -44,6 +51,7 @@ ${CONCRETE_KNOWLEDGE}
 === END ===`;
 }
 
+// ── Normalization ──────────────────────────────────────────
 function normalizeAnswer(val) {
   if (!val) return null;
   const t = String(val).trim();
@@ -66,57 +74,69 @@ function normalizeQuestions(arr) {
       const s = String(o).trim();
       return /^[A-D][.)]\s/.test(s) ? s : `${letters[i]}. ${s.replace(/^[A-D][.)]\s*/, '')}`;
     });
-    out.push({ question: q.question.trim(), options: opts, correctAnswer: letter, explanation: q.explanation.trim() });
+    out.push({
+      question: q.question.trim(),
+      options: opts,
+      correctAnswer: letter,
+      explanation: q.explanation.trim(),
+    });
   }
   return out;
 }
 
+// ── Question generation ────────────────────────────────────
 async function generateQuestions() {
-  const sys = systemPrompt();
+  const sys = systemPrompt() + `
+
+IMPORTANT: You must respond with valid JSON only. Your entire response must be a JSON object with a single key "questions" containing an array of exactly 15 items.`;
+
   const usr = `Generate exactly 15 multiple-choice quiz questions about Concrete.xyz using ONLY the documentation.
 
-Return ONLY a raw JSON array. No markdown, no code fences, no text before or after.
-
-Format:
-[{"question":"...","options":["A. ...","B. ...","C. ...","D. ..."],"correctAnswer":"A","explanation":"..."}]
+Respond with this exact JSON shape:
+{"questions":[{"question":"...","options":["A. ...","B. ...","C. ...","D. ..."],"correctAnswer":"A","explanation":"..."},...]}
 
 Rules:
-- Exactly 15 items
-- "correctAnswer" must be exactly one of: "A" "B" "C" "D" — single letter only
-- 4 options each, prefixed A. B. C. D.
-- Topics: ERC-4626, vault mechanics, fees (1.5% AUM), Earn V1 vs V2, roles, async withdrawals, accounting, risks, rewards
-- Output ONLY the JSON array starting with [ and ending with ]`;
+- Exactly 15 items in the "questions" array
+- "correctAnswer" is ONE letter only: "A", "B", "C", or "D"
+- 4 options each, prefixed "A. " "B. " "C. " "D. "
+- Keep explanations to 1-2 sentences
+- Topics: ERC-4626, vault mechanics, fees, Earn V1 vs V2, roles, async withdrawals, accounting, risks, rewards`;
 
-  for (let i = 1; i <= 3; i++) {
+  for (let i = 1; i <= 2; i++) {
     try {
-      const raw = await callOpenAI(sys, usr, 8000);
-      const cleaned = raw.trim().replace(/^```json\s*/i,'').replace(/^```\s*/i,'').replace(/\s*```$/,'').trim();
-      const parsed = JSON.parse(cleaned);
-      const questions = normalizeQuestions(parsed);
-      if (questions) return questions;
-      console.warn(`Attempt ${i}: normalization failed`);
+      // jsonMode=true forces OpenAI to return valid JSON — no parse errors
+      const raw = await callOpenAI(sys, usr, 6000, true);
+      const parsed = JSON.parse(raw);
+      // Handle both {questions:[...]} and bare [...] 
+      const arr = Array.isArray(parsed) ? parsed : parsed.questions;
+      const questions = normalizeQuestions(arr);
+      if (questions) {
+        console.log(`✅ Questions generated on attempt ${i}`);
+        return questions;
+      }
+      console.warn(`Attempt ${i}: normalization failed, array length=${arr && arr.length}`);
     } catch(e) {
       console.error(`Attempt ${i} error:`, e.message);
-      if (i === 3) throw e;
+      if (i === 2) throw e;
     }
   }
-  throw new Error('Could not generate valid questions after 3 attempts');
+  throw new Error('Could not generate valid questions');
 }
 
+// ── Explain answer ─────────────────────────────────────────
 async function explainAnswer(question, options, correctAnswer, userAnswer) {
-  const usr = `Quiz question about Concrete.xyz:
-Question: ${question}
+  const usr = `Quiz question: ${question}
 Options: ${options.join(' | ')}
-Correct: ${correctAnswer}
-User answered: ${userAnswer}
-In 2-3 sentences explain why ${correctAnswer} is correct. If wrong, note it kindly. Use ONLY the docs.`;
-  return callOpenAI(systemPrompt(), usr, 600);
+Correct: ${correctAnswer} | User answered: ${userAnswer}
+In 2 sentences, explain why ${correctAnswer} is correct. If user was wrong, note it kindly. Use ONLY the docs.`;
+  return callOpenAI(systemPrompt(), usr, 400);
 }
 
+// ── Ask AI ─────────────────────────────────────────────────
 async function askQuestion(question) {
-  const usr = `User question: ${question}
+  const usr = `${question}
 Answer using ONLY the Concrete.xyz documentation. Be concise. If not found say "Not found in project documentation".`;
-  return callOpenAI(systemPrompt(), usr, 800);
+  return callOpenAI(systemPrompt(), usr, 600);
 }
 
 module.exports = { generateQuestions, explainAnswer, askQuestion };
